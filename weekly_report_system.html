@@ -1,0 +1,1456 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>周报管理系统</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+  <script src="https://unpkg.com/html-docx-js@0.3.1/dist/html-docx.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+  
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#3B82F6',
+            secondary: '#6366F1',
+            neutral: '#64748B',
+            light: '#F1F5F9',
+            dark: '#1E293B'
+          },
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+          },
+        },
+      }
+    }
+  </script>
+  
+  <style type="text/tailwindcss">
+    @layer utilities {
+      .content-auto {
+        content-visibility: auto;
+      }
+      .transition-panel {
+        transition: transform 0.3s ease-in-out, opacity 0.3s ease-in-out;
+      }
+      .shadow-soft {
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+      }
+      .text-balance {
+        white-space: normal;
+      }
+      .action-btn {
+        @apply flex items-center justify-center p-2 rounded-full hover:bg-primary/10 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/50;
+      }
+      .modal-backdrop {
+        @apply fixed inset-0 bg-black/50 z-50 flex items-center justify-center opacity-0 pointer-events-none transition-opacity duration-300;
+      }
+      .modal-backdrop.active {
+        @apply opacity-100 pointer-events-auto;
+      }
+      .modal-content {
+        @apply bg-white rounded-lg shadow-lg p-6 max-w-md w-full transform scale-95 transition-transform duration-300;
+      }
+      .modal-backdrop.active .modal-content {
+        @apply scale-100;
+      }
+      input[type="range"] {
+        @apply w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer;
+      }
+      input[type="range"]::-webkit-slider-thumb {
+        @apply appearance-none w-5 h-5 rounded-full bg-primary;
+      }
+      .embedded-container {
+        @apply flex flex-col h-full;
+      }
+      .embedded-header {
+        @apply bg-gray-50 px-6 py-3 border-b border-gray-200 flex flex-wrap justify-between items-center gap-2;
+      }
+      .embedded-content {
+        @apply flex-1 overflow-hidden;
+      }
+      .embedded-iframe {
+        @apply w-full h-full border-0;
+      }
+      #reportContent {
+        display: block;
+        overflow-y: auto;
+      }
+      .report-card {
+        @apply bg-white rounded-xl shadow-soft p-6 max-w-3xl mx-auto w-full my-4;
+      }
+      .notification {
+        @apply fixed top-4 right-4 bg-dark text-white px-4 py-3 rounded-lg shadow-lg transform translate-x-full transition-transform duration-300 z-50 flex items-center;
+      }
+      .notification.show {
+        @apply translate-x-0;
+      }
+      .notification.success {
+        @apply bg-green-600;
+      }
+      .notification.error {
+        @apply bg-red-600;
+      }
+    }
+  </style>
+</head>
+<body class="bg-gray-50 font-sans text-dark">
+  <!-- 通知组件 -->
+  <div id="notification" class="notification">
+    <i class="fa fa-check-circle mr-2"></i>
+    <span id="notificationText">操作成功</span>
+  </div>
+
+  <div class="flex h-screen overflow-hidden">
+    <!-- 侧边栏 - 周数导航 -->
+    <aside class="w-64 bg-white shadow-md flex-shrink-0 overflow-y-auto transition-all duration-300 ease-in-out">
+      <div class="p-5 border-b border-gray-200">
+        <h1 class="text-2xl font-bold text-primary flex items-center">
+          <i class="fa fa-calendar-check-o mr-3"></i>周报管理
+        </h1>
+        <p class="text-neutral text-sm mt-1">高效管理您的每周工作汇报</p>
+      </div>
+      
+      <div class="p-4">
+        <div class="flex justify-between items-center mb-3">
+          <h2 class="font-semibold text-dark">周数列表</h2>
+          <button id="addWeekBtn" class="action-btn text-primary hover:text-primary/80" aria-label="添加新周">
+            <i class="fa fa-plus-circle text-xl"></i>
+          </button>
+        </div>
+        
+        <ul id="weekList" class="space-y-1">
+          <!-- 周数列表将通过JS动态生成 -->
+        </ul>
+      </div>
+    </aside>
+    
+    <!-- 主内容区 -->
+    <main class="flex-1 flex flex-col overflow-hidden">
+      <!-- 顶部工具栏 -->
+      <header class="bg-white shadow-sm p-4 flex justify-between items-center flex-wrap gap-3">
+        <div>
+          <h2 id="currentWeekTitle" class="text-xl font-semibold">请选择周数</h2>
+          <p id="currentWeekInfo" class="text-neutral text-sm"></p>
+        </div>
+        <div class="flex space-x-3">
+          <button id="exportDataBtn" class="flex items-center px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors">
+            <i class="fa fa-download mr-2"></i>导出数据
+          </button>
+          <button id="importDataBtn" class="flex items-center px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors">
+            <i class="fa fa-upload mr-2"></i>导入数据
+          </button>
+          <button id="exportBtn" class="hidden flex items-center px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors">
+            <i class="fa fa-file-word-o mr-2"></i>导出Word
+          </button>
+          <button id="editBtn" class="hidden flex items-center px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors">
+            <i class="fa fa-pencil mr-2"></i>编辑
+          </button>
+          <button id="deleteBtn" class="hidden flex items-center px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors">
+            <i class="fa fa-trash mr-2"></i>删除
+          </button>
+        </div>
+      </header>
+      
+      <!-- 周报内容展示区 -->
+      <div id="reportContent" class="flex-1 p-8 bg-gray-50">
+        <div class="text-center text-neutral">
+          <i class="fa fa-file-text-o text-6xl mb-4 opacity-30"></i>
+          <p>请从左侧选择一周查看或创建周报</p>
+        </div>
+      </div>
+    </main>
+    
+    <!-- 右侧操作面板 - 默认隐藏 -->
+    <div id="actionPanel" class="fixed right-0 top-0 h-full w-96 bg-white shadow-lg transform translate-x-full transition-panel z-50 flex flex-col">
+      <div class="p-5 border-b border-gray-200 flex justify-between items-center">
+        <h3 id="panelTitle" class="text-lg font-semibold">选择操作</h3>
+        <button id="closePanelBtn" class="action-btn text-neutral hover:text-dark" aria-label="关闭面板">
+          <i class="fa fa-times text-xl"></i>
+        </button>
+      </div>
+      
+      <div class="flex-1 overflow-y-auto p-5">
+        <!-- 添加方式选择面板 -->
+        <div id="addMethodSelectionPanel" class="hidden">
+          <p class="text-neutral mb-6">请选择添加方式：</p>
+          <div class="space-y-4">
+            <button id="byWeekBtn" class="w-full py-4 border border-gray-200 rounded-lg hover:bg-light transition-colors flex items-center justify-center">
+              <i class="fa fa-calendar text-primary text-xl mr-3"></i>
+              <span>按周添加</span>
+            </button>
+            <button id="byDateRangeBtn" class="w-full py-4 border border-gray-200 rounded-lg hover:bg-light transition-colors flex items-center justify-center">
+              <i class="fa fa-calendar-check-o text-primary text-xl mr-3"></i>
+              <span>按时间段添加</span>
+            </button>
+          </div>
+        </div>
+        
+        <!-- 按周添加面板 -->
+        <div id="byWeekPanel" class="hidden">
+          <h4 class="font-medium mb-4">选择周数</h4>
+          
+          <div class="space-y-6">
+            <div>
+              <div class="flex justify-between mb-2">
+                <label for="weekNumberSlider" class="text-sm font-medium">第 <span id="selectedWeekNumber">1</span> 周</label>
+                <span class="text-sm text-neutral">年份: <span id="selectedYear">2023</span></span>
+              </div>
+              <input type="range" id="weekNumberSlider" min="1" max="52" value="1" class="w-full">
+              
+              <div class="mt-2 text-sm text-neutral">
+                <p>日期范围: <span id="weekDateRange">2023-01-02 至 2023-01-08</span></p>
+              </div>
+              
+              <div id="weekExistsWarning" class="mt-2 text-sm text-red-500 hidden">
+                <i class="fa fa-exclamation-circle mr-1"></i>该周已存在，请选择其他周数
+              </div>
+            </div>
+            
+            <div class="bg-light p-4 rounded-lg">
+              <p class="text-sm font-medium mb-2">已存在的周数:</p>
+              <div id="existingWeeksList" class="flex flex-wrap gap-2">
+                <!-- 动态显示已存在的周数 -->
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 按时间段添加面板 -->
+        <div id="byDateRangePanel" class="hidden">
+          <h4 class="font-medium mb-4">选择开始日期（仅周一）</h4>
+          
+          <div class="space-y-5">
+            <div>
+              <label class="block text-sm font-medium mb-1">开始日期 <span class="text-red-500">*</span> <span class="text-xs bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded">只能选择周一</span></label>
+              <div class="flex space-x-2">
+                <input type="date" id="rangeStartDate" class="flex-1 border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-primary/50 focus:border-primary outline-none transition-all" required>
+                <span class="flex items-center text-neutral">至</span>
+                <input type="date" id="rangeEndDate" class="flex-1 border border-gray-300 rounded-lg p-3 bg-gray-50 cursor-not-allowed" readonly>
+              </div>
+              <p class="text-xs text-neutral mt-1">选择周一后，系统将自动计算当周周日作为结束日期</p>
+              
+              <div id="invalidMondayWarning" class="mt-2 text-sm text-red-500 hidden">
+                <i class="fa fa-exclamation-circle mr-1"></i>请选择周一作为开始日期
+              </div>
+            </div>
+            
+            <div class="bg-light p-4 rounded-lg">
+              <p class="text-sm font-medium mb-2">计算结果:</p>
+              <p class="text-sm">这是 <span id="calculatedYear">2023</span> 年的第 <span id="calculatedWeek" class="font-medium text-primary">1</span> 周</p>
+              
+              <div id="rangeWeekExistsWarning" class="mt-2 text-sm text-red-500 hidden">
+                <i class="fa fa-exclamation-circle mr-1"></i>该周已存在
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 初始选择面板 -->
+        <div id="initialSelectionPanel">
+          <p class="text-neutral mb-6">该周暂无内容，请选择以下一种方式添加：</p>
+          <div class="space-y-4">
+            <button id="useExternalHtmlBtn" class="w-full py-4 border border-gray-200 rounded-lg hover:bg-light transition-colors flex items-center justify-center">
+              <i class="fa fa-file-code-o text-primary text-xl mr-3"></i>
+              <span>使用外嵌HTML文件</span>
+            </button>
+            <button id="useUrlLinkBtn" class="w-full py-4 border border-gray-200 rounded-lg hover:bg-light transition-colors flex items-center justify-center">
+              <i class="fa fa-link text-primary text-xl mr-3"></i>
+              <span>使用外链URL</span>
+            </button>
+            <button id="fillReportBtn" class="w-full py-4 border border-gray-200 rounded-lg hover:bg-light transition-colors flex items-center justify-center">
+              <i class="fa fa-pencil-square-o text-primary text-xl mr-3"></i>
+              <span>填写周报内容</span>
+            </button>
+          </div>
+        </div>
+        
+        <!-- 填写周报面板 -->
+        <div id="reportFormPanel" class="hidden">
+          <h4 class="font-medium mb-4">填写周报内容</h4>
+          
+          <form id="reportForm" class="space-y-5">
+            <div>
+              <label for="workContent" class="block text-sm font-medium mb-1">本周工作内容 <span class="text-red-500">*</span></label>
+              <textarea id="workContent" rows="6" class="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-primary/50 focus:border-primary outline-none transition-all" placeholder="请输入本周完成的工作内容..." required></textarea>
+            </div>
+            
+            <div>
+              <label for="problems" class="block text-sm font-medium mb-1">遇到的问题</label>
+              <textarea id="problems" rows="4" class="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-primary/50 focus:border-primary outline-none transition-all" placeholder="请输入本周遇到的问题及解决方案..."></textarea>
+            </div>
+            
+            <div>
+              <label for="nextPlan" class="block text-sm font-medium mb-1">下周计划 <span class="text-red-500">*</span></label>
+              <textarea id="nextPlan" rows="4" class="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-primary/50 focus:border-primary outline-none transition-all" placeholder="请输入下周的工作计划..." required></textarea>
+            </div>
+            
+            <div>
+              <label for="notes" class="block text-sm font-medium mb-1">备注（可选）</label>
+              <textarea id="notes" rows="3" class="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-primary/50 focus:border-primary outline-none transition-all" placeholder="其他需要说明的事项..."></textarea>
+            </div>
+          </form>
+        </div>
+        
+        <!-- 外嵌HTML配置面板 -->
+        <div id="externalHtmlConfigPanel" class="hidden">
+          <h4 class="font-medium mb-4">外嵌HTML配置</h4>
+          
+          <form id="externalHtmlForm" class="space-y-5">
+            <div class="bg-light p-4 rounded-lg">
+              <p class="text-sm text-neutral mb-2">文件要求：</p>
+              <ul class="text-sm text-neutral list-disc pl-5 space-y-1">
+                <li>文件名称：<span id="externalFileNameDisplay" class="font-medium text-primary">weekX.html</span></li>
+                <li>放置位置：与本系统文件在同一目录</li>
+                <li>X为当前周数（例如：第2周对应 week2.html）</li>
+              </ul>
+            </div>
+          </form>
+        </div>
+        
+        <!-- URL链接配置面板 -->
+        <div id="urlLinkConfigPanel" class="hidden">
+          <h4 class="font-medium mb-4">外链URL配置</h4>
+          
+          <form id="urlLinkForm" class="space-y-5">
+            <div>
+              <label for="reportUrl" class="block text-sm font-medium mb-1">周报内容URL <span class="text-red-500">*</span></label>
+              <input type="url" id="reportUrl" class="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-primary/50 focus:border-primary outline-none transition-all" 
+                     placeholder="https://example.com/report" required>
+              <p class="text-xs text-neutral mt-1">请输入完整的URL地址（包含http://或https://）</p>
+            </div>
+            
+            <div class="bg-light p-4 rounded-lg">
+              <p class="text-sm text-neutral mb-2">注意事项：</p>
+              <ul class="text-sm text-neutral list-disc pl-5 space-y-1">
+                <li>URL必须是完整的，包含http://或https://</li>
+                <li>部分网站可能因安全设置无法在iframe中显示</li>
+                <li>请确保URL内容与当前周报相关</li>
+              </ul>
+            </div>
+          </form>
+        </div>
+      </div>
+      
+      <div class="p-5 border-t border-gray-200 flex justify-end space-x-3">
+        <button id="backBtn" class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-light transition-colors hidden">
+          返回
+        </button>
+        <button id="confirmBtn" class="px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors">
+          确认
+        </button>
+      </div>
+    </div>
+    
+    <!-- 外嵌HTML提示对话框 -->
+    <div id="externalHtmlInfoModal" class="modal-backdrop">
+      <div class="modal-content">
+        <div class="text-center mb-4">
+          <i class="fa fa-info-circle text-primary text-4xl"></i>
+          <h3 class="text-lg font-semibold mt-2">外嵌HTML文件设置</h3>
+        </div>
+        <p class="text-neutral mb-4">
+          请确保已将周报HTML文件按以下要求放置：
+        </p>
+        <ul class="list-disc pl-5 text-neutral space-y-2 mb-4">
+          <li>文件名称必须为：<span id="requiredFileName" class="font-medium text-primary">weekX.html</span></li>
+          <li>放置位置：与本系统文件（周报管理系统.html）在同一目录</li>
+          <li>X为当前周数（例如：第2周对应 week2.html）</li>
+        </ul>
+        <div class="flex justify-end space-x-3">
+          <button id="cancelExternalBtn" class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-light transition-colors">
+            取消
+          </button>
+          <button id="confirmExternalBtn" class="px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors">
+            已确认设置
+          </button>
+        </div>
+      </div>
+    </div>
+    
+    <!-- URL链接提示对话框 -->
+    <div id="urlLinkInfoModal" class="modal-backdrop">
+      <div class="modal-content">
+        <div class="text-center mb-4">
+          <i class="fa fa-link text-primary text-4xl"></i>
+          <h3 class="text-lg font-semibold mt-2">外链URL设置</h3>
+        </div>
+        <p class="text-neutral mb-4">
+          使用外链URL时请注意以下事项：
+        </p>
+        <ul class="list-disc pl-5 text-neutral space-y-2 mb-4">
+          <li>URL必须是完整的，包含http://或https://</li>
+          <li>部分网站可能因安全设置无法在iframe中显示</li>
+          <li>请确保URL内容与当前周报相关</li>
+        </ul>
+        <div class="flex justify-end space-x-3">
+          <button id="cancelUrlBtn" class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-light transition-colors">
+            取消
+          </button>
+          <button id="confirmUrlBtn" class="px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors">
+            确认
+          </button>
+        </div>
+      </div>
+    </div>
+    
+    <!-- 删除确认对话框 -->
+    <div id="deleteConfirmModal" class="modal-backdrop">
+      <div class="modal-content">
+        <div class="text-center mb-4">
+          <i class="fa fa-exclamation-triangle text-amber-500 text-4xl"></i>
+          <h3 class="text-lg font-semibold mt-2">确认删除</h3>
+        </div>
+        <p class="text-neutral mb-4">
+          您确定要删除 <span id="deleteWeekInfo" class="font-medium"></span> 的周报吗？
+          此操作不可恢复，所有数据将永久删除。
+        </p>
+        <div class="flex justify-end space-x-3">
+          <button id="cancelDeleteBtn" class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-light transition-colors">
+            取消
+          </button>
+          <button id="confirmDeleteBtn" class="px-6 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors">
+            确认删除
+          </button>
+        </div>
+      </div>
+    </div>
+    
+    <!-- 隐藏的文件输入框 -->
+    <input type="file" id="fileInput" accept=".json" class="hidden">
+  </div>
+</body>
+<script>
+  // 全局变量
+  let currentWeek = null;
+  let currentYear = new Date().getFullYear();
+  let reports = {};
+  
+  // 页面加载完成后执行
+  document.addEventListener('DOMContentLoaded', function() {
+    // 初始化数据
+    initData();
+    
+    // 初始化事件监听
+    initEventListeners();
+    
+    // 检查是否需要提示备份（每7天提示一次）
+    checkBackupReminder();
+  });
+  
+  // 初始化数据
+  function initData() {
+    // 从localStorage获取数据，如果没有则创建空对象
+    const savedReports = localStorage.getItem('weeklyReports');
+    reports = savedReports ? JSON.parse(savedReports) : {};
+    
+    // 渲染周数列表
+    renderWeekList();
+  }
+  
+  // 初始化事件监听
+  function initEventListeners() {
+    // 添加周数按钮
+    document.getElementById('addWeekBtn').addEventListener('click', showAddMethodSelectionPanel);
+    
+    // 关闭面板按钮
+    document.getElementById('closePanelBtn').addEventListener('click', closeActionPanel);
+    
+    // 面板内按钮事件
+    document.getElementById('byWeekBtn').addEventListener('click', showByWeekPanel);
+    document.getElementById('byDateRangeBtn').addEventListener('click', showByDateRangePanel);
+    document.getElementById('backBtn').addEventListener('click', goBack);
+    document.getElementById('confirmBtn').addEventListener('click', handleConfirm);
+    
+    // 周数滑块事件
+    document.getElementById('weekNumberSlider').addEventListener('input', updateWeekSlider);
+    
+    // 日期选择事件 - 添加周一验证 (仅保留还存在的元素)
+    document.getElementById('rangeStartDate').addEventListener('change', function() {
+      validateAndUpdateDateRange(this);
+    });
+    
+    // 添加日期输入框的输入事件，强制只能选择周一 (仅保留还存在的元素)
+    const dateInputs = ['rangeStartDate'];
+    dateInputs.forEach(id => {
+      const input = document.getElementById(id);
+      input.addEventListener('input', function() {
+        // 检查日期是否为周一
+        if (this.value) {
+          const selectedDate = new Date(this.value);
+          const dayOfWeek = selectedDate.getDay();
+          const isMonday = dayOfWeek === 1;
+          
+          // 不是周一，显示警告或提示
+          if (!isMonday) {
+            if (id === 'rangeStartDate') {
+              document.getElementById('invalidMondayWarning').classList.remove('hidden');
+            }
+          } else {
+            // 是周一，隐藏警告
+            if (id === 'rangeStartDate') {
+              document.getElementById('invalidMondayWarning').classList.add('hidden');
+            }
+          }
+        }
+      });
+    });
+    
+    // 周报添加方式事件
+    document.getElementById('useExternalHtmlBtn').addEventListener('click', showExternalHtmlConfigPanel);
+    document.getElementById('useUrlLinkBtn').addEventListener('click', showUrlLinkConfigPanel);
+    document.getElementById('fillReportBtn').addEventListener('click', showReportFormPanel);
+    
+    // 外嵌HTML对话框事件
+    document.getElementById('cancelExternalBtn').addEventListener('click', closeExternalHtmlModal);
+    document.getElementById('confirmExternalBtn').addEventListener('click', confirmExternalHtml);
+    
+    // URL链接对话框事件
+    document.getElementById('cancelUrlBtn').addEventListener('click', closeUrlLinkModal);
+    document.getElementById('confirmUrlBtn').addEventListener('click', confirmUrlLink);
+    
+    // 数据导出/导入事件
+    document.getElementById('exportDataBtn').addEventListener('click', exportData);
+    document.getElementById('importDataBtn').addEventListener('click', () => {
+      document.getElementById('fileInput').click();
+    });
+    
+    // 文件导入事件
+    document.getElementById('fileInput').addEventListener('change', handleFileImport);
+    
+    // 编辑和删除按钮事件
+    document.getElementById('editBtn').addEventListener('click', handleEdit);
+    document.getElementById('deleteBtn').addEventListener('click', showDeleteConfirm);
+    
+    // 删除确认对话框事件
+    document.getElementById('cancelDeleteBtn').addEventListener('click', closeDeleteConfirmModal);
+    document.getElementById('confirmDeleteBtn').addEventListener('click', handleDelete);
+    
+    // 导出Word按钮事件
+    document.getElementById('exportBtn').addEventListener('click', exportToWord);
+    
+    // 设置默认日期为当前周一
+    setDefaultDate();
+  }
+  
+  // 验证并更新日期范围 - 核心函数，确保只能选择周一
+  function validateAndUpdateDateRange(startDateInput, endDateId = 'rangeEndDate') {
+    if (!startDateInput.value) {
+      document.getElementById(endDateId).value = '';
+      return;
+    }
+    
+    const startDate = new Date(startDateInput.value);
+    const dayOfWeek = startDate.getDay(); // 0是周日，1是周一，...，6是周六
+    
+    // 检查是否为周一
+    const isMonday = dayOfWeek === 1;
+    
+    // 显示或隐藏警告 (仅对还存在的元素进行操作)
+    if (startDateInput.id === 'rangeStartDate') {
+      document.getElementById('invalidMondayWarning').classList.toggle('hidden', isMonday);
+    }
+    
+    if (!isMonday) {
+      document.getElementById(endDateId).value = '';
+      return;
+    }
+    
+    // 计算结束日期（周日）
+    const endDate = new Date(startDate);
+    endDate.setDate(startDate.getDate() + 6);
+    document.getElementById(endDateId).value = endDate.toISOString().split('T')[0];
+    
+    // 如果是时间段添加面板，计算周数
+    if (startDateInput.id === 'rangeStartDate') {
+      const weekNumber = getWeekNumber(startDate);
+      document.getElementById('calculatedWeek').textContent = weekNumber;
+      document.getElementById('calculatedYear').textContent = startDate.getFullYear();
+      
+      // 检查该周是否已存在
+      const weekKey = `${startDate.getFullYear()}-${weekNumber}`;
+      const rangeWeekExistsWarning = document.getElementById('rangeWeekExistsWarning');
+      if (reports[weekKey]) {
+        rangeWeekExistsWarning.classList.remove('hidden');
+      } else {
+        rangeWeekExistsWarning.classList.add('hidden');
+      }
+    }
+  }
+  
+  // 设置默认日期为当前周一
+  function setDefaultDate() {
+    const today = new Date();
+    const day = today.getDay(); // 0是周日，1是周一，...，6是周六
+    // 计算距离周一的天数差
+    const diffToMonday = day === 0 ? -6 : 1 - day; // 周日需要回退6天到周一，其他日期计算到周一的差值
+    const monday = new Date(today);
+    monday.setDate(today.getDate() + diffToMonday);
+    
+    const formattedMonday = monday.toISOString().split('T')[0];
+    document.getElementById('rangeStartDate').value = formattedMonday;
+    validateAndUpdateDateRange(document.getElementById('rangeStartDate'));
+  }
+  
+  // 渲染周数列表
+  function renderWeekList() {
+    const weekList = document.getElementById('weekList');
+    weekList.innerHTML = '';
+    
+    // 获取所有周并按年份和周数排序
+    const weekKeys = Object.keys(reports).sort((a, b) => {
+      const [yearA, weekA] = a.split('-').map(Number);
+      const [yearB, weekB] = b.split('-').map(Number);
+      if (yearA !== yearB) return yearA - yearB;
+      return weekA - weekB;
+    });
+    
+    if (weekKeys.length === 0) {
+      const emptyItem = document.createElement('li');
+      emptyItem.innerHTML = '<p class="text-center text-neutral text-sm py-2">暂无周报数据</p>';
+      weekList.appendChild(emptyItem);
+      return;
+    }
+    
+    // 按年份分组显示
+    let currentGroupYear = null;
+    let yearGroup = null;
+    
+    weekKeys.forEach(key => {
+      const [year, week] = key.split('-').map(Number);
+      const report = reports[key];
+      
+      // 新建年份分组
+      if (year !== currentGroupYear) {
+        currentGroupYear = year;
+        
+        // 添加年份标题
+        const yearHeader = document.createElement('li');
+        yearHeader.innerHTML = `<p class="text-xs font-semibold text-neutral uppercase mt-3 mb-1">${year}年</p>`;
+        weekList.appendChild(yearHeader);
+        
+        // 创建新的年份组
+        yearGroup = document.createElement('ul');
+        yearGroup.className = 'space-y-1';
+        weekList.appendChild(yearGroup);
+      }
+      
+      // 创建周数项
+      const weekItem = document.createElement('li');
+      weekItem.className = `p-3 rounded-lg cursor-pointer transition-colors ${currentWeek === key ? 'bg-primary/10 border-l-4 border-primary' : 'hover:bg-gray-100'}`;
+      
+      // 使用统一的日期计算方法确保显示周一到周日
+      const startDate = getMondayOfWeek(week, year);
+      const endDate = new Date(startDate);
+      endDate.setDate(startDate.getDate() + 6);
+      
+      const dateFormat = `${startDate.getMonth()+1}/${startDate.getDate()} - ${endDate.getMonth()+1}/${endDate.getDate()}`;
+      
+      weekItem.innerHTML = `
+        <div class="font-medium">第${week}周</div>
+        <div class="text-xs text-neutral">${dateFormat}</div>
+      `;
+      
+      weekItem.addEventListener('click', () => selectWeek(key));
+      yearGroup.appendChild(weekItem);
+    });
+    
+    // 更新已存在周数显示
+    updateExistingWeeksList();
+  }
+  
+  // 选择周数
+  function selectWeek(key) {
+    currentWeek = key;
+    const [year, week] = key.split('-').map(Number);
+    const report = reports[key];
+    
+    // 更新标题和信息
+    document.getElementById('currentWeekTitle').textContent = `${year}年 第${week}周`;
+    
+    // 使用统一的日期计算方法确保显示周一到周日
+    const startDate = getMondayOfWeek(week, year);
+    const endDate = new Date(startDate);
+    endDate.setDate(startDate.getDate() + 6);
+    
+    const dateRange = `${formatDate(startDate)} 至 ${formatDate(endDate)}`;
+    document.getElementById('currentWeekInfo').textContent = dateRange;
+    
+    // 显示周报内容
+    displayReportContent(report);
+    
+    // 更新按钮状态
+    updateActionButtons(true);
+    
+    // 重新渲染列表以更新选中状态
+    renderWeekList();
+  }
+  
+  // 显示周报内容
+  function displayReportContent(report) {
+    const contentContainer = document.getElementById('reportContent');
+    
+    if (report.type === 'internal') {
+      // 显示内部填写的周报
+      contentContainer.innerHTML = `
+        <div class="report-card">
+          <div class="border-b border-gray-200 pb-4 mb-6">
+            <h3 class="text-xl font-semibold">${report.year}年 第${report.week}周 工作周报</h3>
+            <p class="text-neutral mt-1">${formatDate(new Date(report.startDate))} 至 ${formatDate(new Date(report.endDate))}</p>
+          </div>
+          
+          <div class="mb-8">
+            <h4 class="text-lg font-medium mb-3 flex items-center">
+              <i class="fa fa-check-square-o text-primary mr-2"></i>本周工作内容
+            </h4>
+            <div class="pl-6 text-neutral whitespace-pre-line">${report.workContent}</div>
+          </div>
+          
+          <div class="mb-8">
+            <h4 class="text-lg font-medium mb-3 flex items-center">
+              <i class="fa fa-exclamation-triangle text-amber-500 mr-2"></i>遇到的问题
+            </h4>
+            <div class="pl-6 text-neutral whitespace-pre-line">${report.problems || '无'}</div>
+          </div>
+          
+          <div class="mb-8">
+            <h4 class="text-lg font-medium mb-3 flex items-center">
+              <i class="fa fa-calendar-plus-o text-green-500 mr-2"></i>下周计划
+            </h4>
+            <div class="pl-6 text-neutral whitespace-pre-line">${report.nextPlan}</div>
+          </div>
+          
+          ${report.notes ? `
+            <div>
+              <h4 class="text-lg font-medium mb-3 flex items-center">
+                <i class="fa fa-sticky-note-o text-secondary mr-2"></i>备注
+              </h4>
+              <div class="pl-6 text-neutral whitespace-pre-line">${report.notes}</div>
+            </div>
+          ` : ''}
+        </div>
+      `;
+    } else if (report.type === 'external') {
+      // 显示外嵌HTML内容
+      contentContainer.innerHTML = `
+        <div class="embedded-container">
+          <div class="embedded-header">
+            <h3 class="font-medium">${report.year}年 第${report.week}周 工作周报</h3>
+            <p class="text-sm text-neutral">外嵌HTML文件: week${report.week}.html</p>
+          </div>
+          <div class="embedded-content">
+            <iframe class="embedded-iframe" src="week${report.week}.html" 
+                    onerror="this.src='about:blank'; this.contentDocument.body.innerHTML='<p class=text-center>无法加载外嵌HTML文件，请检查文件是否存在</p>'">
+            </iframe>
+          </div>
+        </div>
+      `;
+    } else if (report.type === 'url') {
+      // 显示URL内容
+      contentContainer.innerHTML = `
+        <div class="embedded-container">
+          <div class="embedded-header">
+            <h3 class="font-medium">${report.year}年 第${report.week}周 工作周报</h3>
+            <p class="text-sm text-neutral truncate max-w-xs">${report.url}</p>
+          </div>
+          <div class="embedded-content">
+            <iframe class="embedded-iframe" src="${report.url}" 
+                    onerror="this.src='about:blank'; this.contentDocument.body.innerHTML='<p class=text-center>无法加载该URL内容</p>'">
+            </iframe>
+          </div>
+        </div>
+      `;
+    } else {
+      // 显示初始面板
+      showInitialSelectionPanel();
+    }
+  }
+  
+  // 显示初始选择面板
+  function showInitialSelectionPanel() {
+    document.getElementById('initialSelectionPanel').classList.remove('hidden');
+    document.getElementById('reportFormPanel').classList.add('hidden');
+    document.getElementById('externalHtmlConfigPanel').classList.add('hidden');
+    document.getElementById('urlLinkConfigPanel').classList.add('hidden');
+    document.getElementById('byWeekPanel').classList.add('hidden');
+    document.getElementById('byDateRangePanel').classList.add('hidden');
+    document.getElementById('addMethodSelectionPanel').classList.add('hidden');
+    
+    document.getElementById('panelTitle').textContent = '添加周报内容';
+    document.getElementById('backBtn').classList.add('hidden');
+  }
+  
+  // 显示添加方式选择面板
+  function showAddMethodSelectionPanel() {
+    document.getElementById('initialSelectionPanel').classList.add('hidden');
+    document.getElementById('reportFormPanel').classList.add('hidden');
+    document.getElementById('externalHtmlConfigPanel').classList.add('hidden');
+    document.getElementById('urlLinkConfigPanel').classList.add('hidden');
+    document.getElementById('byWeekPanel').classList.add('hidden');
+    document.getElementById('byDateRangePanel').classList.add('hidden');
+    document.getElementById('addMethodSelectionPanel').classList.remove('hidden');
+    
+    document.getElementById('panelTitle').textContent = '添加新周';
+    document.getElementById('backBtn').classList.add('hidden');
+    
+    // 打开面板
+    openActionPanel();
+  }
+  
+  // 显示按周添加面板
+  function showByWeekPanel() {
+    document.getElementById('addMethodSelectionPanel').classList.add('hidden');
+    document.getElementById('byWeekPanel').classList.remove('hidden');
+    document.getElementById('backBtn').classList.remove('hidden');
+    
+    // 设置当前年份
+    document.getElementById('selectedYear').textContent = currentYear;
+    
+    // 更新滑块显示
+    updateWeekSlider();
+  }
+  
+  // 显示按日期范围添加面板
+  function showByDateRangePanel() {
+    document.getElementById('addMethodSelectionPanel').classList.add('hidden');
+    document.getElementById('byDateRangePanel').classList.remove('hidden');
+    document.getElementById('backBtn').classList.remove('hidden');
+    
+    // 设置默认日期为当前周一
+    setDefaultDate();
+  }
+  
+  // 显示填写周报面板
+  function showReportFormPanel(isEdit = false) {
+    
+    if (isEdit && reports[currentWeek] && reports[currentWeek].type === 'internal') {
+      // 如果是编辑模式，填充现有内容
+      const report = reports[currentWeek];
+      document.getElementById('workContent').value = report.workContent || '';
+      document.getElementById('problems').value = report.problems || '';
+      document.getElementById('nextPlan').value = report.nextPlan || '';
+      document.getElementById('notes').value = report.notes || '';
+    } else {
+      // 如果是新增模式，清空表单
+      document.getElementById('workContent').value = '';
+      document.getElementById('problems').value = '';
+      document.getElementById('nextPlan').value = '';
+      document.getElementById('notes').value = '';
+    }
+    
+    // 显示面板
+    document.getElementById('initialSelectionPanel').classList.add('hidden');
+    document.getElementById('reportFormPanel').classList.remove('hidden');
+    document.getElementById('backBtn').classList.remove('hidden');
+    
+    document.getElementById('panelTitle').textContent = isEdit ? '编辑周报内容' : '填写周报内容';
+  }
+  
+  // 显示外嵌HTML配置面板
+  function showExternalHtmlConfigPanel() {
+    const [year, week] = currentWeek.split('-').map(Number);
+    document.getElementById('externalFileNameDisplay').textContent = `week${week}.html`;
+    
+    // 显示面板
+    document.getElementById('initialSelectionPanel').classList.add('hidden');
+    document.getElementById('externalHtmlConfigPanel').classList.remove('hidden');
+    document.getElementById('backBtn').classList.remove('hidden');
+    
+    document.getElementById('panelTitle').textContent = '外嵌HTML配置';
+  }
+  
+  // 显示URL链接配置面板
+  function showUrlLinkConfigPanel() {
+    document.getElementById('reportUrl').value = '';
+    
+    // 显示面板
+    document.getElementById('initialSelectionPanel').classList.add('hidden');
+    document.getElementById('urlLinkConfigPanel').classList.remove('hidden');
+    document.getElementById('backBtn').classList.remove('hidden');
+    
+    document.getElementById('panelTitle').textContent = '外链URL配置';
+  }
+  
+  // 更新周数滑块显示
+  function updateWeekSlider() {
+    const slider = document.getElementById('weekNumberSlider');
+    const weekNumber = parseInt(slider.value);
+    document.getElementById('selectedWeekNumber').textContent = weekNumber;
+    
+    // 计算该周的日期范围，确保始终是周一到周日
+    const startDate = getMondayOfWeek(weekNumber, currentYear);
+    const endDate = new Date(startDate);
+    endDate.setDate(startDate.getDate() + 6);
+    
+    // 更新日期范围显示
+    document.getElementById('weekDateRange').textContent = `${formatDate(startDate)} 至 ${formatDate(endDate)}`;
+    
+    // 检查该周是否已存在
+    const weekKey = `${currentYear}-${weekNumber}`;
+    const weekExistsWarning = document.getElementById('weekExistsWarning');
+    if (reports[weekKey]) {
+      weekExistsWarning.classList.remove('hidden');
+    } else {
+      weekExistsWarning.classList.add('hidden');
+    }
+  }
+  
+  // 更新已存在周数列表
+  function updateExistingWeeksList() {
+    const container = document.getElementById('existingWeeksList');
+    container.innerHTML = '';
+    
+    // 获取所有周并按周数排序
+    const weeks = Object.keys(reports).map(key => {
+      const [year, week] = key.split('-').map(Number);
+      return { year, week };
+    }).filter(item => item.year === currentYear)
+     .sort((a, b) => a.week - b.week);
+    
+    weeks.forEach(item => {
+      const weekBadge = document.createElement('span');
+      weekBadge.className = 'px-2 py-1 bg-primary/10 text-primary text-xs rounded-full';
+      weekBadge.textContent = `第${item.week}周`;
+      container.appendChild(weekBadge);
+    });
+  }
+  
+  // 打开操作面板
+  function openActionPanel() {
+    document.getElementById('actionPanel').classList.remove('translate-x-full');
+  }
+  
+  // 关闭操作面板
+  function closeActionPanel() {
+    document.getElementById('actionPanel').classList.add('translate-x-full');
+  }
+  
+  // 返回上一级面板
+  function goBack() {
+    if (!document.getElementById('byWeekPanel').classList.contains('hidden') || 
+        !document.getElementById('byDateRangePanel').classList.contains('hidden')) {
+      showAddMethodSelectionPanel();
+    } else {
+      showInitialSelectionPanel();
+    }
+  }
+  
+  // 处理确认按钮
+  function handleConfirm() {
+    if (!document.getElementById('byWeekPanel').classList.contains('hidden')) {
+      // 处理按周添加
+      const weekNumber = parseInt(document.getElementById('weekNumberSlider').value);
+      const weekKey = `${currentYear}-${weekNumber}`;
+      
+      if (reports[weekKey]) {
+        showNotification('该周已存在，请选择其他周数', 'error');
+        return;
+      }
+      
+      // 创建新周（确保使用周一作为开始日期）
+      const startDate = getMondayOfWeek(weekNumber, currentYear);
+      const endDate = new Date(startDate);
+      endDate.setDate(startDate.getDate() + 6);
+      
+      reports[weekKey] = {
+        year: currentYear,
+        week: weekNumber,
+        startDate: startDate.toISOString().split('T')[0],
+        endDate: endDate.toISOString().split('T')[0],
+        type: null
+      };
+      
+      saveReports();
+      renderWeekList();
+      selectWeek(weekKey);
+      showInitialSelectionPanel();
+      showNotification('周数添加成功');
+    } 
+    else if (!document.getElementById('byDateRangePanel').classList.contains('hidden')) {
+      // 处理按日期范围添加
+      const startDateInput = document.getElementById('rangeStartDate');
+      if (!startDateInput.value) {
+        showNotification('请选择开始日期', 'error');
+        return;
+      }
+      
+      const startDate = new Date(startDateInput.value);
+      
+      // 检查是否为周一（双重验证）
+      if (startDate.getDay() !== 1) {
+        showNotification('请选择周一作为开始日期', 'error');
+        return;
+      }
+      
+      // 计算周数和年份
+      const weekNumber = getWeekNumber(startDate);
+      const year = startDate.getFullYear();
+      const weekKey = `${year}-${weekNumber}`;
+      
+      if (reports[weekKey]) {
+        showNotification('该周已存在', 'error');
+        return;
+      }
+      
+      // 计算结束日期（确保是周日）
+      const endDate = new Date(startDate);
+      endDate.setDate(startDate.getDate() + 6);
+      
+      // 创建新周（确保使用周一作为开始日期）
+      reports[weekKey] = {
+        year: year,
+        week: weekNumber,
+        startDate: startDate.toISOString().split('T')[0],
+        endDate: endDate.toISOString().split('T')[0],
+        type: null
+      };
+      
+      saveReports();
+      renderWeekList();
+      selectWeek(weekKey);
+      showInitialSelectionPanel();
+      showNotification('周数添加成功');
+    } 
+    else if (!document.getElementById('reportFormPanel').classList.contains('hidden')) {
+      // 处理填写周报
+      const workContent = document.getElementById('workContent').value.trim();
+      const nextPlan = document.getElementById('nextPlan').value.trim();
+      
+      if (!workContent || !nextPlan) {
+        showNotification('请填写本周工作内容和下周计划', 'error');
+        return;
+      }
+      
+      // 更新周报内容
+      reports[currentWeek] = {
+        ...reports[currentWeek],
+        type: 'internal',
+        workContent: workContent,
+        problems: document.getElementById('problems').value.trim(),
+        nextPlan: nextPlan,
+        notes: document.getElementById('notes').value.trim()
+      };
+      
+      saveReports();
+      displayReportContent(reports[currentWeek]);
+      closeActionPanel();
+      showNotification('周报保存成功');
+    } 
+    else if (!document.getElementById('externalHtmlConfigPanel').classList.contains('hidden')) {
+      // 处理外嵌HTML配置
+      // 更新周报内容
+      reports[currentWeek] = {
+        ...reports[currentWeek],
+        type: 'external'
+      };
+      
+      saveReports();
+      
+      // 显示确认对话框
+      const [year, week] = currentWeek.split('-').map(Number);
+      document.getElementById('requiredFileName').textContent = `week${week}.html`;
+      document.getElementById('externalHtmlInfoModal').classList.add('active');
+    } 
+    else if (!document.getElementById('urlLinkConfigPanel').classList.contains('hidden')) {
+      // 处理URL链接配置
+      const reportUrl = document.getElementById('reportUrl').value.trim();
+      
+      if (!reportUrl) {
+        showNotification('请输入周报内容URL', 'error');
+        return;
+      }
+      
+      // 简单验证URL格式
+      try {
+        new URL(reportUrl);
+      } catch (e) {
+        showNotification('请输入有效的URL地址', 'error');
+        return;
+      }
+      
+      // 更新周报内容
+      reports[currentWeek] = {
+        ...reports[currentWeek],
+        type: 'url',
+        url: reportUrl
+      };
+      
+      saveReports();
+      
+      // 显示确认对话框
+      document.getElementById('urlLinkInfoModal').classList.add('active');
+    }
+  }
+  
+  // 关闭外嵌HTML提示对话框
+  function closeExternalHtmlModal() {
+    document.getElementById('externalHtmlInfoModal').classList.remove('active');
+  }
+  
+  // 确认外嵌HTML设置
+  function confirmExternalHtml() {
+    closeExternalHtmlModal();
+    displayReportContent(reports[currentWeek]);
+    closeActionPanel();
+    showNotification('外嵌HTML配置成功');
+  }
+  
+  // 关闭URL链接提示对话框
+  function closeUrlLinkModal() {
+    document.getElementById('urlLinkInfoModal').classList.remove('active');
+  }
+  
+  // 确认URL链接设置
+  function confirmUrlLink() {
+    closeUrlLinkModal();
+    displayReportContent(reports[currentWeek]);
+    closeActionPanel();
+    showNotification('URL链接配置成功');
+  }
+  
+  // 显示删除确认对话框
+  function showDeleteConfirm() {
+    if (!currentWeek) return;
+    
+    const [year, week] = currentWeek.split('-').map(Number);
+    document.getElementById('deleteWeekInfo').textContent = `${year}年第${week}周`;
+    document.getElementById('deleteConfirmModal').classList.add('active');
+  }
+  
+  // 关闭删除确认对话框
+  function closeDeleteConfirmModal() {
+    document.getElementById('deleteConfirmModal').classList.remove('active');
+  }
+  
+  // 处理编辑按钮
+  function handleEdit() {
+    if (!currentWeek) return;
+    
+    const report = reports[currentWeek];
+    
+    // 根据周报类型显示相应的编辑面板
+    if (report.type === 'internal') {
+      showReportFormPanel(true); // 传递true表示是编辑模式
+    } else if (report.type === 'external') {
+      // 加载现有数据，但确保日期范围是周一到周日
+      const [year, week] = currentWeek.split('-').map(Number);
+      const startDate = getMondayOfWeek(week, year);
+      const endDate = new Date(startDate);
+      endDate.setDate(startDate.getDate() + 6);
+      
+      document.getElementById('externalStartDate').value = startDate.toISOString().split('T')[0];
+      document.getElementById('externalEndDate').value = endDate.toISOString().split('T')[0];
+      document.getElementById('externalFileNameDisplay').textContent = `week${week}.html`;
+      
+      showExternalHtmlConfigPanel();
+    } else if (report.type === 'url') {
+      // 加载现有数据，但确保日期范围是周一到周日
+      const [year, week] = currentWeek.split('-').map(Number);
+      const startDate = getMondayOfWeek(week, year);
+      const endDate = new Date(startDate);
+      endDate.setDate(startDate.getDate() + 6);
+      
+      document.getElementById('urlStartDate').value = startDate.toISOString().split('T')[0];
+      document.getElementById('urlEndDate').value = endDate.toISOString().split('T')[0];
+      document.getElementById('reportUrl').value = report.url || '';
+      
+      showUrlLinkConfigPanel();
+    } else {
+      showInitialSelectionPanel();
+    }
+    
+    openActionPanel();
+  }
+  
+  // 处理删除按钮
+  function handleDelete() {
+    if (!currentWeek) return;
+    
+    try {
+      // 保存要删除的周信息用于提示
+      const [year, week] = currentWeek.split('-').map(Number);
+      const weekInfo = `${year}年第${week}周`;
+      
+      // 删除周报
+      delete reports[currentWeek];
+      saveReports();
+      
+      // 重置当前选择
+      currentWeek = null;
+      document.getElementById('currentWeekTitle').textContent = '请选择周数';
+      document.getElementById('currentWeekInfo').textContent = '';
+      
+      // 更新界面
+      document.getElementById('reportContent').innerHTML = `
+        <div class="text-center text-neutral">
+          <i class="fa fa-file-text-o text-6xl mb-4 opacity-30"></i>
+          <p>请从左侧选择一周查看或创建周报</p>
+        </div>
+      `;
+      
+      updateActionButtons(false);
+      renderWeekList();
+      
+      // 关闭确认对话框并显示成功提示
+      closeDeleteConfirmModal();
+      showNotification(`${weekInfo}的周报已成功删除`);
+    } catch (error) {
+      console.error('删除失败:', error);
+      closeDeleteConfirmModal();
+      showNotification('删除失败，请重试', 'error');
+    }
+  }
+  
+  // 更新操作按钮状态
+  function updateActionButtons(hasSelection) {
+    if (hasSelection) {
+      document.getElementById('exportBtn').classList.remove('hidden');
+      document.getElementById('editBtn').classList.remove('hidden');
+      document.getElementById('deleteBtn').classList.remove('hidden');
+    } else {
+      document.getElementById('exportBtn').classList.add('hidden');
+      document.getElementById('editBtn').classList.add('hidden');
+      document.getElementById('deleteBtn').classList.add('hidden');
+    }
+  }
+  
+  // 显示通知
+  function showNotification(message, type = 'success') {
+    const notification = document.getElementById('notification');
+    const notificationText = document.getElementById('notificationText');
+    
+    // 设置通知内容和类型
+    notificationText.textContent = message;
+    notification.className = 'notification';
+    notification.classList.add(type);
+    
+    // 显示通知
+    notification.classList.add('show');
+    
+    // 3秒后隐藏通知
+    setTimeout(() => {
+      notification.classList.remove('show');
+    }, 3000);
+  }
+  
+  // 导出数据
+  function exportData() {
+    // 获取所有周报数据
+    const dataStr = JSON.stringify(reports, null, 2);
+    const dataBlob = new Blob([dataStr], { type: 'application/json' });
+    
+    // 生成文件名（包含当前日期）
+    const date = new Date();
+    const fileName = `周报数据_${date.getFullYear()}${(date.getMonth()+1).toString().padStart(2,'0')}${date.getDate().toString().padStart(2,'0')}.json`;
+    
+    // 下载文件
+    saveAs(dataBlob, fileName);
+    
+    // 更新最后备份日期
+    localStorage.setItem('lastBackupDate', new Date().toISOString().split('T')[0]);
+    showNotification('数据导出成功');
+  }
+  
+  // 处理文件导入
+  function handleFileImport(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    // 验证文件类型
+    if (!file.name.endsWith('.json')) {
+      showNotification('请选择JSON格式的文件', 'error');
+      return;
+    }
+    
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const importedData = JSON.parse(event.target.result);
+        
+        // 验证导入的数据格式
+        if (typeof importedData !== 'object' || importedData === null) {
+          throw new Error('数据格式不正确');
+        }
+        
+        // 确认覆盖现有数据
+        if (confirm('导入将覆盖现有数据，是否继续？')) {
+          reports = importedData;
+          saveReports();
+          
+          // 重新加载周数列表
+          renderWeekList();
+          
+          // 关闭当前显示的周报
+          currentWeek = null;
+          document.getElementById('reportContent').innerHTML = `
+            <div class="text-center text-neutral">
+              <i class="fa fa-file-text-o text-6xl mb-4 opacity-30"></i>
+              <p>请从左侧选择一周查看或创建周报</p>
+            </div>
+          `;
+          
+          // 重置按钮状态
+          updateActionButtons(false);
+          document.getElementById('currentWeekTitle').textContent = '请选择周数';
+          document.getElementById('currentWeekInfo').textContent = '';
+          
+          showNotification('数据导入成功');
+        }
+      } catch (error) {
+        showNotification(`文件格式错误，无法导入数据: ${error.message}`, 'error');
+        console.error('导入错误:', error);
+      }
+    };
+    reader.readAsText(file);
+    
+    // 重置文件输入，允许重复选择同一文件
+    e.target.value = '';
+  }
+  
+  // 导出为Word
+  function exportToWord() {
+    if (!currentWeek) return;
+    
+    const report = reports[currentWeek];
+    if (report.type !== 'internal') {
+      showNotification('只有系统内填写的周报才能导出为Word', 'error');
+      return;
+    }
+    
+    // 创建要导出的HTML内容
+    const startDate = new Date(report.startDate);
+    const endDate = new Date(report.endDate);
+    const dateRange = `${formatDate(startDate)} 至 ${formatDate(endDate)}`;
+    
+    const htmlContent = `
+      <html>
+        <head>
+          <meta charset="UTF-8">
+          <title>${report.year}年 第${report.week}周 工作周报</title>
+          <style>
+            body { font-family: SimSun, serif; line-height: 1.6; }
+            h1 { text-align: center; color: #333; }
+            .date { text-align: center; color: #666; margin-bottom: 30px; }
+            .section { margin-bottom: 20px; }
+            h2 { color: #333; border-bottom: 1px solid #ccc; padding-bottom: 5px; }
+            .content { margin-left: 20px; }
+          </style>
+        </head>
+        <body>
+          <h1>${report.year}年 第${report.week}周 工作周报</h1>
+          <p class="date">${dateRange}</p>
+          
+          <div class="section">
+            <h2>一、本周工作内容</h2>
+            <div class="content">${report.workContent.replace(/\n/g, '<br>')}</div>
+          </div>
+          
+          <div class="section">
+            <h2>二、遇到的问题</h2>
+            <div class="content">${report.problems ? report.problems.replace(/\n/g, '<br>') : '无'}</div>
+          </div>
+          
+          <div class="section">
+            <h2>三、下周计划</h2>
+            <div class="content">${report.nextPlan.replace(/\n/g, '<br>')}</div>
+          </div>
+          
+          ${report.notes ? `
+            <div class="section">
+              <h2>四、备注</h2>
+              <div class="content">${report.notes.replace(/\n/g, '<br>')}</div>
+            </div>
+          ` : ''}
+        </body>
+      </html>
+    `;
+    
+    // 转换为Word文档并下载
+    const blob = htmlDocx.asBlob(htmlContent);
+    saveAs(blob, `${report.year}年第${report.week}周工作周报.docx`);
+    showNotification('Word文档导出成功');
+  }
+  
+  // 检查是否需要提示备份
+  function checkBackupReminder() {
+    const lastBackup = localStorage.getItem('lastBackupDate');
+    const today = new Date().toISOString().split('T')[0];
+    
+    if (!lastBackup || daysBetween(lastBackup, today) >= 7) {
+      if (confirm('已超过7天未备份数据，建议导出数据以防止丢失，是否现在导出？')) {
+        exportData();
+      }
+      localStorage.setItem('lastBackupDate', today);
+    }
+  }
+  
+  // 保存周报数据
+  function saveReports() {
+    try {
+      localStorage.setItem('weeklyReports', JSON.stringify(reports));
+    } catch (error) {
+      console.error('保存数据失败:', error);
+      showNotification('保存数据失败，请检查存储空间', 'error');
+    }
+  }
+  
+  // 工具函数：计算两个日期之间的天数
+  function daysBetween(date1, date2) {
+    const oneDay = 24 * 60 * 60 * 1000;
+    const firstDate = new Date(date1);
+    const secondDate = new Date(date2);
+    return Math.round(Math.abs((firstDate - secondDate) / oneDay));
+  }
+  
+  // 工具函数：格式化日期为YYYY-MM-DD
+  function formatDate(date) {
+    return `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')}`;
+  }
+  
+  // 获取指定年份第n周的周一日期 - 改进版，使用ISO周数计算
+  function getMondayOfWeek(weekNumber, year) {
+    // 创建当年1月4日的日期（ISO周数计算的参考点）
+    const jan4 = new Date(year, 0, 4);
+    // 计算1月4日是星期几（0是周日，1是周一，...，6是周六）
+    const dayOfWeek = jan4.getDay() || 7; // 转换为1-7（周一到周日）
+    
+    // 计算当年第一个周一的日期
+    const firstMonday = new Date(jan4);
+    firstMonday.setDate(jan4.getDate() - (dayOfWeek - 1));
+    
+    // 计算第n周的周一（加(n-1)*7天）
+    const targetMonday = new Date(firstMonday);
+    targetMonday.setDate(firstMonday.getDate() + (weekNumber - 1) * 7);
+    
+    return targetMonday;
+  }
+  
+  // 获取日期所在的周数 - 改进版，使用ISO周数计算
+  function getWeekNumber(date) {
+    // 创建日期副本，避免修改原始日期
+    const d = new Date(date);
+    d.setHours(0, 0, 0, 0);
+    
+    // 调整到周四（ISO周数以周四为一周的中点）
+    d.setDate(d.getDate() + 4 - (d.getDay() || 7));
+    
+    // 获取当年第一天
+    const yearStart = new Date(d.getFullYear(), 0, 1);
+    
+    // 计算周数（用毫秒差除以一周的毫秒数，然后取整）
+    const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+    
+    // 处理可能的跨年情况
+    if (d.getMonth() === 0 && weekNo > 50) {
+      return 1;
+    } else if (d.getMonth() === 11 && weekNo === 1) {
+      return 52; // 大多数年份是52周，闰年可能有53周
+    }
+    
+    return weekNo;
+  }
+</script>
+</html>

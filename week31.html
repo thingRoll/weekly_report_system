@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>能效管理周报 - 数据可视化报告</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary-color: #2563eb;
+            --secondary-color: #f8fafc;
+            --accent-color: #10b981;
+            --warning-color: #f59e0b;
+            --danger-color: #ef4444;
+            --text-primary: #1e293b;
+            --text-secondary: #64748b;
+            --border-color: #e2e8f0;
+            --success-light: #ecfdf5;
+            --warning-light: #fefbeb;
+            --danger-light: #fef2f2;
+        }
+
+        body {
+            font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+            color: var(--text-primary);
+            line-height: 1.4;
+            font-size: 13px;
+        }
+
+        .report-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 15px;
+            background: white;
+            min-height: 100vh;
+        }
+
+        .report-header {
+            text-align: center;
+            margin-bottom: 20px;
+            padding: 15px 0;
+            border-bottom: 3px solid var(--primary-color);
+        }
+
+        .report-title {
+            font-size: 24px;
+            font-weight: bold;
+            color: var(--primary-color);
+            margin-bottom: 5px;
+        }
+
+        .report-date {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        .section {
+            margin-bottom: 20px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            overflow: hidden;
+        }
+
+        .section-header {
+            background: var(--primary-color);
+            color: white;
+            padding: 8px 15px;
+            font-size: 15px;
+            font-weight: bold;
+        }
+
+        .section-content {
+            padding: 15px;
+        }
+
+        /* 紧凑表格样式 */
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+            margin-bottom: 10px;
+        }
+
+        .data-table th,
+        .data-table td {
+            padding: 6px 8px;
+            text-align: center;
+            border: 1px solid var(--border-color);
+            white-space: nowrap;
+        }
+
+        .data-table th {
+            background: var(--secondary-color);
+            font-weight: bold;
+            color: var(--text-primary);
+        }
+
+        .data-table tbody tr:nth-child(even) {
+            background: #fafafa;
+        }
+
+        .change-positive {
+            color: var(--danger-color);
+            font-weight: bold;
+        }
+
+        .change-negative {
+            color: var(--accent-color);
+            font-weight: bold;
+        }
+
+        /* 双列布局 */
+        .two-column {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            align-items: start;
+        }
+
+        /* 图表容器 */
+        .chart-container {
+            height: 280px;
+            position: relative;
+            background: white;
+            border-radius: 6px;
+            padding: 10px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .chart-title {
+            font-size: 13px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            text-align: center;
+            color: var(--text-primary);
+        }
+
+        /* 指标卡片 */
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .metric-card {
+            background: linear-gradient(135deg, var(--secondary-color) 0%, #ffffff 100%);
+            padding: 12px;
+            border-radius: 6px;
+            text-align: center;
+            border: 1px solid var(--border-color);
+        }
+
+        .metric-value {
+            font-size: 18px;
+            font-weight: bold;
+            color: var(--primary-color);
+            margin-bottom: 3px;
+        }
+
+        .metric-label {
+            font-size: 11px;
+            color: var(--text-secondary);
+        }
+
+        /* 工作内容列表 */
+        .work-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        .work-section h4 {
+            font-size: 14px;
+            color: var(--primary-color);
+            margin-bottom: 8px;
+            padding-bottom: 4px;
+            border-bottom: 2px solid var(--border-color);
+        }
+
+        .work-list {
+            list-style: none;
+        }
+
+        .work-list li {
+            padding: 4px 0;
+            font-size: 12px;
+            position: relative;
+            padding-left: 15px;
+        }
+
+        .work-list li:before {
+            content: "▶";
+            position: absolute;
+            left: 0;
+            color: var(--primary-color);
+            font-size: 10px;
+        }
+
+        /* 波动数据样式 */
+        .fluctuation-item {
+            margin-bottom: 8px;
+            padding: 6px 10px;
+            background: var(--secondary-color);
+            border-radius: 4px;
+            font-size: 12px;
+            border-left: 3px solid var(--primary-color);
+        }
+
+        .location-name {
+            font-weight: bold;
+            color: var(--primary-color);
+        }
+
+        /* Kuse 品牌标识 */
+        .kuse-branding {
+            position: fixed;
+            bottom: 15px;
+            right: 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 8px 12px;
+            border-radius: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            font-size: 11px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+        }
+
+        .kuse-branding:hover {
+            color: var(--primary-color);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        .kuse-branding svg {
+            height: 1.2em;
+            transition: color 0.3s ease;
+        }
+
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            .two-column,
+            .work-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .metrics-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            
+            .data-table {
+                font-size: 11px;
+            }
+            
+            .data-table th,
+            .data-table td {
+                padding: 4px 6px;
+            }
+        }
+
+        @media print {
+            body {
+                background: white;
+            }
+            
+            .kuse-branding {
+                position: static;
+                margin-top: 20px;
+                justify-content: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+        <!-- 报告标题 -->
+        <div class="report-header">
+            <h1 class="report-title">能效管理周报</h1>
+            <p class="report-date">2025年第31周 | 数据可视化分析报告（截止到本周五）</p>
+        </div>
+
+        <!-- 一、能效与能耗数据汇总 -->
+        <div class="section">
+            <div class="section-header">一、能效与能耗数据汇总</div>
+            <div class="section-content">
+                <div class="metrics-grid">
+                    <div class="metric-card">
+                        <div class="metric-value">4项目</div>
+                        <div class="metric-label">监测项目</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value">25.28万</div>
+                        <div class="metric-label">本周总能耗(kWh)</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value">+21.1%</div>
+                        <div class="metric-label">同比平均变化</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value">3.79</div>
+                        <div class="metric-label">平均能效</div>
+                    </div>
+                </div>
+
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>项目</th>
+                            <th>本周平均能效</th>
+                            <th>近月平均能效</th>
+                            <th>本周累计能耗</th>
+                            <th>上年同期能耗</th>
+                            <th>同比变化</th>
+                            <th>上周累计能耗</th>
+                            <th>环比变化</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>邵寨煤业</strong></td>
+                            <td>0.95</td>
+                            <td>0.6</td>
+                            <td>1.1万kWh</td>
+                            <td>9915kWh</td>
+                            <td class="change-positive">+10.9%</td>
+                            <td>4115kWh</td>
+                            <td class="change-positive">+167.3%</td>
+                        </tr>
+                        <tr>
+                            <td><strong>大安机场</strong></td>
+                            <td>6.36</td>
+                            <td>6.39</td>
+                            <td>5.35万kWh</td>
+                            <td>4.52万kWh</td>
+                            <td class="change-positive">+18.4%</td>
+                            <td>5.81万kWh</td>
+                            <td class="change-negative">-7.9%</td>
+                        </tr>
+                        <tr>
+                            <td><strong>中医院</strong></td>
+                            <td>3.07</td>
+                            <td>3.28</td>
+                            <td>11.2万kWh</td>
+                            <td>6.1万kWh</td>
+                            <td class="change-positive">+83.6%</td>
+                            <td>13.41万kWh</td>
+                            <td class="change-negative">-16.4%</td>
+                        </tr>
+                        <tr>
+                            <td><strong>文化中心</strong></td>
+                            <td>4.68</td>
+                            <td>4.88</td>
+                            <td>7.63万kWh</td>
+                            <td>8.37万kWh</td>
+                            <td class="change-negative">-8.9%</td>
+                            <td>8.13万kWh</td>
+                            <td class="change-negative">-6.2%</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 二、可视化分析 -->
+        <div class="section">
+            <div class="section-header">二、能效与能耗可视化分析</div>
+            <div class="section-content">
+                <div class="two-column">
+                    <div>
+                        <div class="chart-container">
+                            <div class="chart-title">各项目能效对比</div>
+                            <canvas id="efficiencyChart"></canvas>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="chart-container">
+                            <div class="chart-title">能耗同比变化分析</div>
+                            <canvas id="consumptionChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 三、能效波动详情 -->
+        <div class="section">
+            <div class="section-header">三、各项目能效本周波动</div>
+            <div class="section-content">
+                <div class="fluctuation-item">
+                    <span class="location-name">邵寨煤业：</span>0.74—1.05，周二最高1.05
+                </div>
+                <div class="fluctuation-item">
+                    <span class="location-name">大安机场：</span>6以上，最高7.29（7.26），最低5.95（7.31）
+                </div>
+                <div class="fluctuation-item">
+                    <span class="location-name">中医院：</span>7.8—7.11间达4.75—5.57，其他时间3.0—3.3；本周最高3.11（周一），最低3.04（周四）
+                </div>
+                <div class="fluctuation-item">
+                    <span class="location-name">文化中心：</span>最高4.78（7.31，14360kWh），最低4.67（7.28，10804kWh）
+                </div>
+            </div>
+        </div>
+
+        <!-- 四、工作总结与计划 -->
+        <div class="section">
+            <div class="section-header">四、工作总结与下周计划</div>
+            <div class="section-content">
+                <div class="work-grid">
+                    <div class="work-section">
+                        <h4>本周重点工作</h4>
+                        <ul class="work-list">
+                            <li>完成邵寨煤业等4项目能效跟踪与数据分析</li>
+                            <li>工作站采购方案对比与计划敲定</li>
+                            <li>文化中心能源站无人值守改造分析</li>
+                            <li>巡检机器人调研及需求确认</li>
+                            <li>软著编制推进（系统环境、功能、代码、手册等）</li>
+                            <li>融雪小室模型尺寸标注</li>
+                        </ul>
+                    </div>
+                    <div class="work-section">
+                        <h4>下周工作计划</h4>
+                        <ul class="work-list">
+                            <li>智慧巡检软硬件及机器人巡检调研</li>
+                            <li>工作站系统建设</li>
+                            <li>软著材料编制与申请推进</li>
+                            <li>持续能效数据跟踪与分析优化</li>
+                            <li>各项技术及采购工作按进度推进</li>
+                        </ul>
+                        
+                        <h4 style="margin-top: 15px;">工作备注</h4>
+                        <ul class="work-list">
+                            <li>能效提升与能耗降低为主要工作目标</li>
+                            <li>数据持续跟踪中，重点关注异常波动</li>
+                            <li>各项技术及采购工作按进度推进</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 能效对比图表
+        const efficiencyCtx = document.getElementById(`efficiencyChart`).getContext(`2d`);
+        new Chart(efficiencyCtx, {
+            type: `bar`,
+            data: {
+                labels: [`邵寨煤业`, `大安机场`, `中医院`, `文化中心`],
+                datasets: [{
+                    label: `本周平均能效`,
+                    data: [0.95, 6.36, 3.07, 4.68],
+                    backgroundColor: [`#3b82f6`, `#10b981`, `#f59e0b`, `#8b5cf6`],
+                    borderColor: [`#2563eb`, `#059669`, `#d97706`, `#7c3aed`],
+                    borderWidth: 2
+                }, {
+                    label: `近月平均能效`,
+                    data: [0.6, 6.39, 3.28, 4.88],
+                    backgroundColor: [`#93c5fd`, `#86efac`, `#fcd34d`, `#c4b5fd`],
+                    borderColor: [`#60a5fa`, `#4ade80`, `#fbbf24`, `#a78bfa`],
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: `top`,
+                        labels: {
+                            font: {
+                                size: 11
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            font: {
+                                size: 10
+                            }
+                        }
+                    },
+                    x: {
+                        ticks: {
+                            font: {
+                                size: 10
+                            }
+                        }
+                    }
+                },
+                layout: {
+                    padding: 10
+                }
+            }
+        });
+
+        // 能耗变化图表
+        const consumptionCtx = document.getElementById(`consumptionChart`).getContext(`2d`);
+        new Chart(consumptionCtx, {
+            type: `line`,
+            data: {
+                labels: [`邵寨煤业`, `大安机场`, `中医院`, `文化中心`],
+                datasets: [{
+                    label: `同比变化 (%)`,
+                    data: [10.9, 18.4, 83.6, -8.9],
+                    borderColor: `#ef4444`,
+                    backgroundColor: `rgba(239, 68, 68, 0.1)`,
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.4
+                }, {
+                    label: `环比变化 (%)`,
+                    data: [167.3, -7.9, -16.4, -6.2],
+                    borderColor: `#10b981`,
+                    backgroundColor: `rgba(16, 185, 129, 0.1)`,
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: `top`,
+                        labels: {
+                            font: {
+                                size: 11
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: false,
+                        grid: {
+                            color: `rgba(0,0,0,0.1)`
+                        },
+                        ticks: {
+                            font: {
+                                size: 10
+                            },
+                            callback: function(value) {
+                                return value + `%`;
+                            }
+                        }
+                    },
+                    x: {
+                        ticks: {
+                            font: {
+                                size: 10
+                            }
+                        }
+                    }
+                },
+                layout: {
+                    padding: 10
+                }
+            }
+        });
+    </script>
+
+    <!-- Kuse SDK -->
+    <script src="https://cdn.kuse.ai/sdk.prd.js"></script>
+</body>
+</html>
