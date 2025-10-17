@@ -5,13 +5,8 @@
 ## 功能特性
 
 ### 📋 核心功能
-- **周数管理**：支持按周数或日期范围添加周报
-- <img width="573" height="537" alt="image" src="https://github.com/user-attachments/assets/353041b9-e56e-4c1a-acf3-cb0c9f9dea35" />
-- <img width="566" height="542" alt="image" src="https://github.com/user-attachments/assets/84f99b57-a0a4-4f49-8590-590e693f2016" />
-- <img width="585" height="516" alt="image" src="https://github.com/user-attachments/assets/a2492710-b8ea-4c6b-bbc2-98da1efdb7c9" />
-
-- **多类型周报内容**：
-- 
+- **周数管理**：
+  - **多类型周报内容**：
   - <img width="567" height="492" alt="image" src="https://github.com/user-attachments/assets/6c58f082-930c-45d1-bde7-1b67dc4e2e2b" />
   - 内部填写：直接在系统中填写标准格式的周报
   - <img width="2544" height="1323" alt="image" src="https://github.com/user-attachments/assets/a3ade2bf-27dd-4bfb-b831-f4f8dec6c97a" />
@@ -19,6 +14,10 @@
   - <img width="2550" height="1377" alt="image" src="https://github.com/user-attachments/assets/b993c796-29f3-47ce-8803-8a864a5f7a4d" />
   - 外链URL：支持通过URL嵌入外部内容
   - <img width="2547" height="1362" alt="image" src="https://github.com/user-attachments/assets/f8a89c36-376b-4a0d-bbe1-9165308bca69" />
+  - **支持按周数或日期范围添加周报**：
+  - <img width="573" height="537" alt="image" src="https://github.com/user-attachments/assets/353041b9-e56e-4c1a-acf3-cb0c9f9dea35" />
+  - <img width="566" height="542" alt="image" src="https://github.com/user-attachments/assets/84f99b57-a0a4-4f49-8590-590e693f2016" />
+  - <img width="585" height="516" alt="image" src="https://github.com/user-attachments/assets/a2492710-b8ea-4c6b-bbc2-98da1efdb7c9" />
 - **数据管理**：
   - 数据导出：将所有周报数据导出为JSON文件
   - 数据导入：从JSON文件恢复周报数据
